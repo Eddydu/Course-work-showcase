@@ -1,0 +1,297 @@
+---
+title: "data scraping"
+author: "Jiahui Du"
+date: "November 3, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+#########this RMD is to show how I scrape data from the websites 
+#########and running this problem is not needed as datasets are uploaded on Github
+
+library(plotly)
+library(boxoffice)
+library(tidyverse)
+library(jsonlite)
+library(httr)
+library(dplyr)
+library(expss)
+library(tidytext)
+library(stringr)
+library(reshape)
+library(ggplot2)
+library(base)
+
+##############nyt##############
+apikey_times = "c4338e5f3f9544468a7c4de890a455c1"
+
+url <- "http://api.nytimes.com/svc/movies/v2/reviews/search.json?"
+query <- "query=&"
+qdate <- "opening-date=2017-01-01;2017-01-01&" #date range
+key <- "api-key=" #apikey_times contains NYT api key
+url2 <- paste0(url,query,qdate,key,apikey_times)
+nytdat <- fromJSON(url2)
+
+nyt_cp_movie = data.frame(nytdat$results$critics_pick,
+                          nytdat$results$display_title,
+                          nytdat$results$summary_short)
+
+
+dates <- seq(as.Date("2017-01-02"), as.Date("2017-12-31"), by=7)
+
+dates = c(dates, as.Date("2017-12-31"))
+
+
+for (i in 1:(length(dates)-1) ) {
+qdate <- paste("opening-date=",format(dates[i]),';',format(dates[i+1]),'&', sep="" )
+
+
+
+url <- "http://api.nytimes.com/svc/movies/v2/reviews/search.json?"
+query <- "query=&"
+key <- "api-key=" #apikey_times contains NYT api key
+url2 <- paste0(url,query,qdate,key,apikey_times)
+
+break_list = seq(1,length(dates), by=4 )
+
+ if( i %in% break_list){
+   Sys.sleep(1)
+  }
+
+nytdat <- fromJSON(url2)
+
+temp = data.frame(nytdat$results$critics_pick,
+                          nytdat$results$display_title,
+                          nytdat$results$summary_short)
+
+nyt_cp_movie = rbind(temp,nyt_cp_movie )
+}
+
+names(nyt_cp_movie)[1] = "pick"
+names(nyt_cp_movie)[2] = "movie"
+names(nyt_cp_movie)[3] = "review"
+
+nyt_cp_movie = nyt_cp_movie %>%
+    select(movie, pick,review) %>%
+    group_by(movie, pick) %>%
+    arrange(movie, pick) %>%
+    slice(n())
+
+ nyt_picked <- subset(nyt_cp_movie,  pick > 0)
+ nyt_not_picked <- subset(nyt_cp_movie,  pick <1)
+
+ 
+##############numbers data##############
+bodat <- boxoffice(dates = seq(as.Date("2017-01-01"), as.Date("2017-01-01"), "day"), site = "numbers")
+
+mojo_rev = bodat
+
+
+mojo_rev = mojo_rev  %>%
+    select(movie, distributor, gross, percent_change, theaters, per_theater, total_gross, days, date) %>%
+    group_by(movie, distributor) %>%
+    arrange(total_gross, days) %>%
+    slice(n())
+
+
+
+
+dates2 <- seq(as.Date("2017-01-02"), as.Date("2017-12-31"), by=30)
+dates2 = c(dates2, as.Date("2017-12-31"))
+
+
+for (i in 1:(length(dates2)-1) ) {
+  start <- paste(format(dates2[i]))
+  end <- paste(format(dates2[i+1]))
+
+  Sys.sleep(1)
+
+  bodat <- boxoffice(dates = seq(as.Date(start), as.Date(end), "day"), site = "numbers")
+
+  temp = bodat
+
+  temp2 = temp %>%
+    select(movie, distributor, gross, percent_change, theaters, per_theater, total_gross, days, date) %>%
+    group_by(movie, distributor) %>%
+    arrange(total_gross, days) %>%
+    slice(n())
+
+  temp3 = rbind(mojo_rev,temp2)
+
+
+  mojo_rev = temp3 %>%
+    select(movie, distributor, gross, percent_change, theaters, per_theater, total_gross, days, date) %>%
+    group_by(movie, distributor) %>%
+    arrange(total_gross, days) %>%
+    slice(n())
+}
+
+#making correction to the mojo_rev movie name
+temp = mojo_rev
+names(temp)[1] = "movie_old"
+
+temp['movie'] = NA
+
+temp$movie = ifelse(temp$movie_old  == 'Birdboy: The Forgotten Chil.', 'Birdboy: The Forgotten Children',
+             ifelse(temp$movie_old  == 'Captain Underpants: The Fir.', 'Captain Underpants: The First Epic',
+             ifelse(temp$movie_old  == 'Diary of a Wimpy Kid: The L.', 'Diary of a Wimpy Kid: The Long Haul',
+             ifelse(temp$movie_old  == 'Fantastic Beasts and Where .', 'Fantastic Beasts and Where to Find Them',
+             ifelse(temp$movie_old  == 'Gentleman: Sundar, Susheel,.', 'Gentleman: Sundar, Susheel, Risky',
+             ifelse(temp$movie_old  == 'Jeremiah Tower: The Last Ma.', 'Jeremiah Tower: The Last Magnificent',
+             ifelse(temp$movie_old  == 'King Arthur: Legend of the .', 'King Arthur: Legend of the Sword',
+             ifelse(temp$movie_old  == 'Long Strange Trip: The Unto.', 'Long Strange Trip',
+             ifelse(temp$movie_old  == "Miss Peregrine's Home for.", "Miss Peregrine's Home for Peculiar Children",
+             ifelse(temp$movie_old  == 'My Entire High School Sinki.', "My Entire High School Sinking Into the Sea",
+             ifelse(temp$movie_old  == 'Pirates of the Caribbean: D.', "Pirates of the Caribbean: Dead Men Tell No Tales",
+             ifelse(temp$movie_old  == 'Professor Marston & The Won.', "Professor Marston and the Wonder Women",
+             ifelse(temp$movie_old  == 'Resident Evil: The Final Ch.', "Resident Evil: The Final Chapter",
+             ifelse(temp$movie_old  == 'Star Wars Ep. VIII: The Las.', "Star Wars: Episode VIII - The Last Jedi",
+             ifelse(temp$movie_old  == 'The Only Living Boy in New .', "The Only Living Boy in New York",
+             ifelse(temp$movie_old  == 'The Resurrection of Gavin S.', "The Resurrection of Gavin Stone",
+             ifelse(temp$movie_old  == "Tyler Perry's Boo 2! A Ma.", "Boo 2! A Madea Halloween",
+             ifelse(temp$movie_old  == "Valerian and the City of a .", "Valerian and the City of a Thousand Planets",
+             ifelse(temp$movie_old  == "Wasted! The Story of Food W.", "Wasted! The Story of Food Waste",
+             ifelse(temp$movie_old  == "Close Encounters of the Thi.", "Close Encounters Of The Third Kind",
+             ifelse(temp$movie_old  == "Journey to the West: The De.", "Journey to the West: The Demons Strike Back",
+             ifelse(temp$movie_old  == "Three Billboards Outside Eb.", "Three Billboards Outside Ebbing, Missouri", temp$movie_old
+
+
+              ))))))))))))))))))))))
+
+mojo_rev = temp[,2:10]
+
+
+
+##############OMDB data 1##############
+
+nyt_picked_a2 = nyt_picked
+
+#OMDb data
+apikey_omdb ="59a6f6c5"
+
+omdb_q <- GET("http://www.omdbapi.com/",
+          query = list(t = nyt_picked_a2$movie[1], apikey = apikey_omdb))
+
+temp <- as.data.frame(content(omdb_q))
+
+omdb_dat = temp %>%
+  select(Title, Genre, Awards, Ratings.Source, Ratings.Value, Ratings.Source.1, Ratings.Value.1, Ratings.Source.2, Ratings.Value.2)
+
+
+for (i in 2:nrow(nyt_picked_a2)) {
+#since there are some data error, record 98 - movie Raees is removed
+if(nyt_picked_a2$movie[i] != 'Raees'){
+
+omdb_q <- GET("http://www.omdbapi.com/",
+          query = list(t = nyt_picked_a2$movie[i], apikey = apikey_omdb))
+
+temp <- as.data.frame(content(omdb_q))
+
+
+      fncols <- function(data, cname) {
+        add <-cname[!cname%in%names(data)]
+
+        if(length(add)!=0) data[add] <- NA
+        data
+      }
+
+temp3 = fncols(temp, c('Title', 'Genre', 'Awards', 'Ratings.Source', 'Ratings.Value', 'Ratings.Source.1', 'Ratings.Value.1', 'Ratings.Source.2', 'Ratings.Value.2'))
+
+if (temp$Response == 'True'){temp2 = temp3 %>%
+    select(Title, Genre, Awards, Ratings.Source, Ratings.Value, Ratings.Source.1, Ratings.Value.1, Ratings.Source.2, Ratings.Value.2)
+    omdb_dat = rbind(omdb_dat,temp2)}
+
+}
+}
+
+##############OMDB data 2##############
+
+nyt_not_picked_a3 = nyt_not_picked
+
+#OMDb data
+apikey_omdb ="59a6f6c5"
+
+omdb_q <- GET("http://www.omdbapi.com/",
+          query = list(t = nyt_not_picked_a3$movie[1], apikey = apikey_omdb))
+
+temp <- as.data.frame(content(omdb_q))
+
+      fncols <- function(data, cname) {
+        add <-cname[!cname%in%names(data)]
+
+        if(length(add)!=0) data[add] <- NA
+        data
+      }
+
+temp3 = fncols(temp, c('Title', 'Genre', 'Awards', 'Ratings.Source', 'Ratings.Value', 'Ratings.Source.1', 'Ratings.Value.1', 'Ratings.Source.2', 'Ratings.Value.2'))
+
+omdb_dat_np = temp3 %>%
+  select(Title, Genre, Awards, Ratings.Source, Ratings.Value, Ratings.Source.1, Ratings.Value.1, Ratings.Source.2, Ratings.Value.2)
+
+
+for (i in 2:nrow(nyt_not_picked_a3)) {
+#since there are some data error, record 34, 65 , 212, 312, 370 - movie AL DI QUA (Life/Here),No Dress Code Required, Valerian, The Penguin Counters, Paraguay Remembered  are removed
+
+if(!(nyt_not_picked_a3$movie[i] %in% c('AL DI QUA (Life/Here)','No Dress Code Required', 'Valerian', 'The Penguin Counters', 'Paraguay Remembered'))) {
+omdb_q <- GET("http://www.omdbapi.com/",
+          query = list(t = nyt_not_picked_a3$movie[i], apikey = apikey_omdb))
+
+temp <- as.data.frame(content(omdb_q))
+
+
+
+temp3 = fncols(temp, c('Title', 'Genre', 'Awards', 'Ratings.Source', 'Ratings.Value', 'Ratings.Source.1', 'Ratings.Value.1', 'Ratings.Source.2', 'Ratings.Value.2'))
+
+if (temp$Response == 'True'){temp2 = temp3 %>%
+    select(Title, Genre, Awards, Ratings.Source, Ratings.Value, Ratings.Source.1, Ratings.Value.1, Ratings.Source.2, Ratings.Value.2)
+    omdb_dat_np = rbind(omdb_dat_np,temp2)}
+
+}
+}
+
+
+##############OMDB data 3##############
+list_all = mojo_rev
+
+
+
+#OMDb data
+apikey_omdb ="59a6f6c5"
+
+omdb_q <- GET("http://www.omdbapi.com/",
+          query = list(t = list_all$movie[1], apikey = apikey_omdb))
+
+temp <- as.data.frame(content(omdb_q))
+
+omdb_dat_all = temp %>%
+  select(Title, Genre, Awards, Ratings.Source, Ratings.Value, Ratings.Source.1, Ratings.Value.1, Ratings.Source.2, Ratings.Value.2)
+
+
+for (i in 2:nrow(list_all)) {
+#since there are some data error, movie Mayweather vs. McGregor, Raees, Spices of Liberty, The B-Side, The Helsings, The Queen of Katwe,Three Generations, Thrill Ride are removed
+if(!(list_all$movie[i] %in% c('Mayweather vs. McGregor', 'Raees', 'Spices of Liberty', 'The B-Side', 'The Helsings', 'The Queen of Katwe','Three Generations', 'Thrill Ride'))){
+
+
+
+omdb_q <- GET("http://www.omdbapi.com/",
+          query = list(t = list_all$movie[i], apikey = apikey_omdb))
+
+temp <- as.data.frame(content(omdb_q))
+
+
+      fncols <- function(data, cname) {
+        add <-cname[!cname%in%names(data)]
+
+        if(length(add)!=0) data[add] <- NA
+        data
+      }
+
+temp3 = fncols(temp, c('Title', 'Genre', 'Awards', 'Ratings.Source', 'Ratings.Value', 'Ratings.Source.1', 'Ratings.Value.1', 'Ratings.Source.2', 'Ratings.Value.2'))
+
+if (temp$Response == 'True'){temp2 = temp3 %>%
+    select(Title, Genre, Awards, Ratings.Source, Ratings.Value, Ratings.Source.1, Ratings.Value.1, Ratings.Source.2, Ratings.Value.2)
+    omdb_dat_all = rbind(omdb_dat_all,temp2)}
+
+}
+}
+```

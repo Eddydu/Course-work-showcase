@@ -1,0 +1,823 @@
+---
+title: "Analysis of factors that make a successful movie"
+author: "Jiahui Du"
+date: "October 21, 2018"
+output:
+  html_document: default
+  pdf_document: default
+---
+##### Student number: 998268556
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE )
+```
+
+```{r}
+library(plotly)
+library(boxoffice)
+library(tidyverse)
+library(jsonlite)
+library(httr)
+library(dplyr)
+library(expss)
+library(tidytext)
+library(stringr)
+library(reshape)
+library(ggplot2)
+library(base)
+
+```
+
+Nowadays more and more movie rating tools are available for movie goers to check and review movies. Intuitively it is logical to state that people would check the reviews before committing their time and money into watching the movies, and thence the reviews must have some impacts to the movies' success and revenue. However, it may be also true that people would still watch the 'bad rated' movies as long as the movies are from big production companies or have famous celebrities involved. So what kind of characteristics would really have an (positive/negative) association with the movie revenue? This research paper would try to discover the answer to that question though analysis based on movies in 2017. 
+
+<br>
+
+The first question to tackle is "how successful New York Times (NYT) movie critics pick box office hits". Movie critics pick data from New York Times (NYT) and revenues data from The Numbers are used. For the purpose of this report, "success" is defined as either movies that are box office hits or received positive reviews from audiences. 
+<br>
+
+```{r}
+#NYT data:
+# 
+# apikey_times = "c4338e5f3f9544468a7c4de890a455c1"
+# 
+# url <- "http://api.nytimes.com/svc/movies/v2/reviews/search.json?"
+# query <- "query=&"
+# qdate <- "opening-date=2017-01-01;2017-01-01&" #date range
+# key <- "api-key=" #apikey_times contains NYT api key
+# url2 <- paste0(url,query,qdate,key,apikey_times)
+# nytdat <- fromJSON(url2)
+# 
+# nyt_cp_movie = data.frame(nytdat$results$critics_pick,
+#                           nytdat$results$display_title,
+#                           nytdat$results$summary_short)
+# 
+# 
+# dates <- seq(as.Date("2017-01-02"), as.Date("2017-12-31"), by=7)
+# 
+# dates = c(dates, as.Date("2017-12-31"))
+# 
+# 
+# for (i in 1:(length(dates)-1) ) {
+# qdate <- paste("opening-date=",format(dates[i]),';',format(dates[i+1]),'&', sep="" )
+# 
+# 
+# 
+# url <- "http://api.nytimes.com/svc/movies/v2/reviews/search.json?"
+# query <- "query=&"
+# key <- "api-key=" #apikey_times contains NYT api key
+# url2 <- paste0(url,query,qdate,key,apikey_times)
+# 
+# break_list = seq(1,length(dates), by=4 )
+# 
+#  if( i %in% break_list){
+#    Sys.sleep(1)
+#   }
+# 
+# nytdat <- fromJSON(url2)
+# 
+# temp = data.frame(nytdat$results$critics_pick,
+#                           nytdat$results$display_title,
+#                           nytdat$results$summary_short)
+# 
+# nyt_cp_movie = rbind(temp,nyt_cp_movie )
+# }
+# 
+# names(nyt_cp_movie)[1] = "pick"
+# names(nyt_cp_movie)[2] = "movie"
+# names(nyt_cp_movie)[3] = "review"
+# 
+# nyt_cp_movie = nyt_cp_movie %>%
+#     select(movie, pick,review) %>%
+#     group_by(movie, pick) %>%
+#     arrange(movie, pick) %>%
+#     slice(n())
+
+
+nyt_cp_movie <- read_csv(file = "https://raw.githubusercontent.com/eddyeddyeddy/sta2453proj1/master/nyt_cp_movie.csv")
+
+
+ nyt_picked <- subset(nyt_cp_movie,  pick > 0)
+ nyt_not_picked <- subset(nyt_cp_movie,  pick <1)
+
+```
+
+```{r}
+
+#numbers data
+# 
+# bodat <- boxoffice(dates = seq(as.Date("2017-01-01"), as.Date("2017-01-01"), "day"), site = "numbers")
+# 
+# mojo_rev = bodat
+# 
+# 
+# mojo_rev = mojo_rev  %>%
+#     select(movie, distributor, gross, percent_change, theaters, per_theater, total_gross, days, date) %>%
+#     group_by(movie, distributor) %>%
+#     arrange(total_gross, days) %>%
+#     slice(n())
+# 
+# 
+# 
+# 
+# dates2 <- seq(as.Date("2017-01-02"), as.Date("2017-12-31"), by=30)
+# dates2 = c(dates2, as.Date("2017-12-31"))
+# 
+# 
+# for (i in 1:(length(dates2)-1) ) {
+#   start <- paste(format(dates2[i]))
+#   end <- paste(format(dates2[i+1]))
+# 
+#   Sys.sleep(1)
+# 
+#   bodat <- boxoffice(dates = seq(as.Date(start), as.Date(end), "day"), site = "numbers")
+# 
+#   temp = bodat
+# 
+#   temp2 = temp %>%
+#     select(movie, distributor, gross, percent_change, theaters, per_theater, total_gross, days, date) %>%
+#     group_by(movie, distributor) %>%
+#     arrange(total_gross, days) %>%
+#     slice(n())
+# 
+#   temp3 = rbind(mojo_rev,temp2)
+# 
+# 
+#   mojo_rev = temp3 %>%
+#     select(movie, distributor, gross, percent_change, theaters, per_theater, total_gross, days, date) %>%
+#     group_by(movie, distributor) %>%
+#     arrange(total_gross, days) %>%
+#     slice(n())
+# }
+# 
+# #making correction to the mojo_rev movie name
+# temp = mojo_rev
+# names(temp)[1] = "movie_old"
+# 
+# temp['movie'] = NA
+# 
+# temp$movie = ifelse(temp$movie_old  == 'Birdboy: The Forgotten Chil.', 'Birdboy: The Forgotten Children',
+#              ifelse(temp$movie_old  == 'Captain Underpants: The Fir.', 'Captain Underpants: The First Epic',
+#              ifelse(temp$movie_old  == 'Diary of a Wimpy Kid: The L.', 'Diary of a Wimpy Kid: The Long Haul',
+#              ifelse(temp$movie_old  == 'Fantastic Beasts and Where .', 'Fantastic Beasts and Where to Find Them',
+#              ifelse(temp$movie_old  == 'Gentleman: Sundar, Susheel,.', 'Gentleman: Sundar, Susheel, Risky',
+#              ifelse(temp$movie_old  == 'Jeremiah Tower: The Last Ma.', 'Jeremiah Tower: The Last Magnificent',
+#              ifelse(temp$movie_old  == 'King Arthur: Legend of the .', 'King Arthur: Legend of the Sword',
+#              ifelse(temp$movie_old  == 'Long Strange Trip: The Unto.', 'Long Strange Trip',
+#              ifelse(temp$movie_old  == "Miss Peregrine's Home for.", "Miss Peregrine's Home for Peculiar Children",
+#              ifelse(temp$movie_old  == 'My Entire High School Sinki.', "My Entire High School Sinking Into the Sea",
+#              ifelse(temp$movie_old  == 'Pirates of the Caribbean: D.', "Pirates of the Caribbean: Dead Men Tell No Tales",
+#              ifelse(temp$movie_old  == 'Professor Marston & The Won.', "Professor Marston and the Wonder Women",
+#              ifelse(temp$movie_old  == 'Resident Evil: The Final Ch.', "Resident Evil: The Final Chapter",
+#              ifelse(temp$movie_old  == 'Star Wars Ep. VIII: The Las.', "Star Wars: Episode VIII - The Last Jedi",
+#              ifelse(temp$movie_old  == 'The Only Living Boy in New .', "The Only Living Boy in New York",
+#              ifelse(temp$movie_old  == 'The Resurrection of Gavin S.', "The Resurrection of Gavin Stone",
+#              ifelse(temp$movie_old  == "Tyler Perry's Boo 2! A Ma.", "Boo 2! A Madea Halloween",
+#              ifelse(temp$movie_old  == "Valerian and the City of a .", "Valerian and the City of a Thousand Planets",
+#              ifelse(temp$movie_old  == "Wasted! The Story of Food W.", "Wasted! The Story of Food Waste",
+#              ifelse(temp$movie_old  == "Close Encounters of the Thi.", "Close Encounters Of The Third Kind",
+#              ifelse(temp$movie_old  == "Journey to the West: The De.", "Journey to the West: The Demons Strike Back",
+#              ifelse(temp$movie_old  == "Three Billboards Outside Eb.", "Three Billboards Outside Ebbing, Missouri", temp$movie_old
+# 
+# 
+#               ))))))))))))))))))))))
+# 
+# mojo_rev = temp[,2:10]
+
+mojo_rev <- read_csv(file = "https://raw.githubusercontent.com/eddyeddyeddy/sta2453proj1/master/mojo_rev.csv")
+
+```
+
+
+
+According to Mojo, the average of all 2017 movies total gross is around 15 million, and this amount of gross will be the threshold of being a 'box office hit' movie in this analysis. Below is a cross tabulation table of showing whether the movies are NYT picked and have a gross revenue over 15 million.
+<br>
+
+```{r}
+#the 1st analysis - cross table (over 15m)
+
+#organize the datasets
+
+nyt_cp_movie_a1 = nyt_cp_movie
+mojo_rev_a1 = mojo_rev
+
+
+mojo_rev_a1_over15m <- subset(mojo_rev_a1,  total_gross>= 15000000)
+Total_o15m = length(mojo_rev_a1_over15m)
+
+
+a1_data <- merge(nyt_cp_movie_a1, mojo_rev_a1, by.x = "movie", by.y = "movie")
+
+a1_data$over15m[a1_data$total_gross>= 15000000]<-'1'
+a1_data$over15m[a1_data$total_gross < 15000000]<-'2'
+
+#cosmetic
+a1_data$pick2[a1_data$pick > 0]<-'1'
+a1_data$pick2[a1_data$pick < 1]<-'2'
+
+a1_data = apply_labels(a1_data, 
+                 over15m = 'Gross revenue of movies that are over 15 million',
+                 over15m = num_lab("
+                        1 Yes
+                        2 No
+                    "),
+                 pick2 = 'NYT critics pick movies',   
+                 pick2 = num_lab("
+                        1 Yes
+                        2 No
+                    "
+                    )
+)
+
+cro( a1_data$pick2, a1_data$over15m )
+
+
+```
+
+<br>
+
+The tabulation consists 185 movies in 2017 that are both found in NYT and The Numbers data sources. We could quickly see the odd ratios of "success" (Gross revenue of movies that are over 15 million) from NOT NYT critics pick is 1.76 times as likely as the odds from NYT critics pick (Odd ratios = 77x23/14x72 = 1.76). In other words, NYT critics pick seems failing to be a decent guide to determine if the movies are box office hits. 
+
+<br>
+
+However, one may argue that huge popularity from audiences may be deemed as 'success' of a movie. Below is a frequency table of showing all NYT critics picked movies ratings from 3 different movie review websites. The ratings from IMBd, Rotten Tomato and Metacritic are all converted to scale of 1 to 100 and categorized into 4 different groups. The ratings are sourced from OMDb.
+ 
+<br>
+
+
+```{r}
+ #the 1st analysis - cross table (reviews)
+# 
+# nyt_picked_a2 = nyt_picked
+# 
+# #OMDb data
+# apikey_omdb ="59a6f6c5"
+# 
+# omdb_q <- GET("http://www.omdbapi.com/", 
+#           query = list(t = nyt_picked_a2$movie[1], apikey = apikey_omdb))
+#           
+# temp <- as.data.frame(content(omdb_q))
+# 
+# omdb_dat = temp %>%
+#   select(Title, Genre, Awards, Ratings.Source, Ratings.Value, Ratings.Source.1, Ratings.Value.1, Ratings.Source.2, Ratings.Value.2)
+# 
+# 
+# for (i in 2:nrow(nyt_picked_a2)) {
+# #since there are some data error, record 98 - movie Raees is removed
+# if(nyt_picked_a2$movie[i] != 'Raees'){
+#   
+# omdb_q <- GET("http://www.omdbapi.com/", 
+#           query = list(t = nyt_picked_a2$movie[i], apikey = apikey_omdb))
+#           
+# temp <- as.data.frame(content(omdb_q))
+# 
+# 
+#       fncols <- function(data, cname) {
+#         add <-cname[!cname%in%names(data)]
+#       
+#         if(length(add)!=0) data[add] <- NA
+#         data
+#       }
+# 
+# temp3 = fncols(temp, c('Title', 'Genre', 'Awards', 'Ratings.Source', 'Ratings.Value', 'Ratings.Source.1', 'Ratings.Value.1', 'Ratings.Source.2', 'Ratings.Value.2'))
+# 
+# if (temp$Response == 'True'){temp2 = temp3 %>%
+#     select(Title, Genre, Awards, Ratings.Source, Ratings.Value, Ratings.Source.1, Ratings.Value.1, Ratings.Source.2, Ratings.Value.2)
+#     omdb_dat = rbind(omdb_dat,temp2)}
+# 
+# }
+# }
+######################################
+
+omdb_dat <- read_csv(file = "https://raw.githubusercontent.com/eddyeddyeddy/sta2453proj1/master/omdb_dat.csv")
+
+#convert review scores
+omdb_dat['imbd'] = NA
+omdb_dat['tomato'] = NA
+omdb_dat['meta'] = NA
+
+omdb_dat$imbd <- ifelse(omdb_dat$Ratings.Source  == 'Internet Movie Database', as.numeric(substr(omdb_dat$Ratings.Value,1,3))*10, NA)
+
+omdb_dat$tomato <- ifelse(omdb_dat$Ratings.Source.1  == 'Rotten Tomatoes', as.numeric(substr(omdb_dat$Ratings.Value.1, 1,2)), 
+                        ifelse(omdb_dat$Ratings.Source.2  == 'Rotten Tomatoes', as.numeric(substr(omdb_dat$Ratings.Value.2, 1,2)), NA))  
+   
+omdb_dat$meta <- ifelse(omdb_dat$Ratings.Source.1  == 'Metacritic', as.numeric(substr(omdb_dat$Ratings.Value.1, 1,2)), 
+                        ifelse(omdb_dat$Ratings.Source.2  == 'Metacritic', as.numeric(substr(omdb_dat$Ratings.Value.2, 1,2)), NA)) 
+  
+#catergorize
+#omdb_dat <- na.omit(omdb_dat)
+
+omdb_dat['imbd_c'] = NA
+omdb_dat['tomato_c'] = NA
+omdb_dat['meta_c'] = NA
+
+ omdb_dat$imbd_c <- ifelse( 85 < omdb_dat$imbd, 1, ifelse( 75 < omdb_dat$imbd, 2, ifelse( 60 < omdb_dat$imbd, 3, ifelse( is.na(omdb_dat$imbd) != 'TRUE', 4, NA ))))
+ omdb_dat$tomato_c <- ifelse( 85 < omdb_dat$tomato, 1, ifelse( 75 < omdb_dat$tomato, 2, ifelse( 60 < omdb_dat$tomato, 3, ifelse( is.na(omdb_dat$tomato) != 'TRUE', 4, NA ))))
+ omdb_dat$meta_c <- ifelse( 85 < omdb_dat$meta, 1, ifelse( 75 < omdb_dat$meta, 2, ifelse( 60 < omdb_dat$meta, 3, ifelse( is.na(omdb_dat$meta) != 'TRUE', 4, NA ))))
+
+ 
+#cosmetic
+ omdb_dat = apply_labels(omdb_dat, 
+                 imbd_c = 'IMBd',
+                 imbd_c = num_lab("
+                        1 85 - 100
+                        2  75 - 85
+                        3  60 - 75
+                        4  < 60
+                    "),
+                 tomato_c = 'Rotten Tomato',
+                 tomato_c = num_lab("
+                        1 85 - 100
+                        2  75 - 85
+                        3  60 - 75
+                        4  < 60
+                    "),
+                 meta_c = 'Metacritic',
+                 meta_c = num_lab("
+                        1 85 - 100
+                        2  75 - 85
+                        3  60 - 75
+                        4  < 60
+                    ")
+                    )
+ 
+ 
+ 
+
+
+freq_table = fre(list(omdb_dat$imbd_c, omdb_dat$tomato_c, omdb_dat$meta_c))
+ 
+freq_table[,1:3]
+```
+
+<br>
+There are 99 NYT critics picked movies that have mathced infomation from OMDb and those 99 movies are analyzed in above table. It is worth noticing that there are more than 62 percent of reviewers from Rotten Tomato rated the NYT picked movies a score of 85 and above. And almost 50 percents of audiences from Metacritic gave the NYT picked movies a score of 75 and above whereas around 30 percents of critics picked movies are scored 75 and above from IMBd. Overall it seems the audiences are in general favourable to the NYT critics picked movies.
+
+
+<br>
+Now the next topic is to find out whether NYT critics pick favor certain genres of movie. We would first take a look at two bar charts to visulize the most frequent genres that are picked and not picked from NYT. The bar charts have included all different genres per movie if one movie has more than one genre. The information of the movies genres is taken from OMDb.
+
+```{r}
+ #the 2nd analysis - Bar charts
+
+# 
+# nyt_not_picked_a3 = nyt_not_picked
+# 
+# #OMDb data
+# apikey_omdb ="59a6f6c5"
+# 
+# omdb_q <- GET("http://www.omdbapi.com/", 
+#           query = list(t = nyt_not_picked_a3$movie[1], apikey = apikey_omdb))
+#           
+# temp <- as.data.frame(content(omdb_q))
+# 
+#       fncols <- function(data, cname) {
+#         add <-cname[!cname%in%names(data)]
+#       
+#         if(length(add)!=0) data[add] <- NA
+#         data
+#       }
+#       
+# temp3 = fncols(temp, c('Title', 'Genre', 'Awards', 'Ratings.Source', 'Ratings.Value', 'Ratings.Source.1', 'Ratings.Value.1', 'Ratings.Source.2', 'Ratings.Value.2'))
+# 
+# omdb_dat_np = temp3 %>%
+#   select(Title, Genre, Awards, Ratings.Source, Ratings.Value, Ratings.Source.1, Ratings.Value.1, Ratings.Source.2, Ratings.Value.2)
+# 
+# 
+# for (i in 2:nrow(nyt_not_picked_a3)) {
+# #since there are some data error, record 34, 65 , 212, 312, 370 - movie AL DI QUA (Life/Here),No Dress Code Required, Valerian, The Penguin Counters, Paraguay Remembered  are removed
+# 
+# if(!(nyt_not_picked_a3$movie[i] %in% c('AL DI QUA (Life/Here)','No Dress Code Required', 'Valerian', 'The Penguin Counters', 'Paraguay Remembered'))) {
+# omdb_q <- GET("http://www.omdbapi.com/", 
+#           query = list(t = nyt_not_picked_a3$movie[i], apikey = apikey_omdb))
+#           
+# temp <- as.data.frame(content(omdb_q))
+# 
+# 
+# 
+# temp3 = fncols(temp, c('Title', 'Genre', 'Awards', 'Ratings.Source', 'Ratings.Value', 'Ratings.Source.1', 'Ratings.Value.1', 'Ratings.Source.2', 'Ratings.Value.2'))
+# 
+# if (temp$Response == 'True'){temp2 = temp3 %>%
+#     select(Title, Genre, Awards, Ratings.Source, Ratings.Value, Ratings.Source.1, Ratings.Value.1, Ratings.Source.2, Ratings.Value.2)
+#     omdb_dat_np = rbind(omdb_dat_np,temp2)}
+# 
+# }
+# }
+###################################
+omdb_dat_np <- read_csv(file = "https://raw.githubusercontent.com/eddyeddyeddy/sta2453proj1/master/omdb_dat_np.csv")
+
+omdb_dat_np['imbd'] = NA
+omdb_dat_np['tomato'] = NA
+omdb_dat_np['meta'] = NA
+
+omdb_dat_np$imbd <- suppressWarnings( ifelse(omdb_dat_np$Ratings.Source  == 'Internet Movie Database', as.numeric(substr(omdb_dat_np$Ratings.Value,1,3))*10, NA) )
+
+omdb_dat_np$tomato <- suppressWarnings( ifelse(omdb_dat_np$Ratings.Source.1  == 'Rotten Tomatoes', as.numeric(substr(omdb_dat_np$Ratings.Value.1, 1,2)), 
+                        ifelse(omdb_dat_np$Ratings.Source.2  == 'Rotten Tomatoes', as.numeric(substr(omdb_dat_np$Ratings.Value.2, 1,2)), NA))  )
+   
+omdb_dat_np$meta <- suppressWarnings( ifelse(omdb_dat_np$Ratings.Source.1  == 'Metacritic', as.numeric(substr(omdb_dat_np$Ratings.Value.1, 1,2)), 
+                        ifelse(omdb_dat_np$Ratings.Source.2  == 'Metacritic', as.numeric(substr(omdb_dat_np$Ratings.Value.2, 1,2)), NA)) )
+
+
+#tokenize the Genre
+#picked 
+Genre_p = omdb_dat
+
+Genre_p2 = as.data.frame(Genre_p[,2])
+Genre_p2 %>% mutate_if(is.factor, as.character) -> Genre_p2
+names(Genre_p2)[1] = 'genre'
+
+Genre_p3 <- Genre_p2 %>%  unnest_tokens(word, genre)
+
+Genre_p3$word = ifelse(Genre_p3$word == 'sci', 'sci-fi', Genre_p3$word)
+
+Genre_p3 = subset(Genre_p3, Genre_p3$word != 'fi')
+
+look_Genre_p3 = Genre_p3 %>% count(word,sort = T)  
+
+Genre_p3 %>% count(word,sort = T) %>%
+#plot
+ggplot(aes(x = reorder(word, 
+    n, function(n) -n), y = n)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 60, 
+    hjust = 1)) + xlab("") + labs(y = "Genres of movies picked by NYT")
+```
+
+```{r}
+ #the 2nd analysis - Bar charts
+
+#not picked
+Genre_np = omdb_dat_np
+
+Genre_np2 = as.data.frame(Genre_np[,2])
+Genre_np2 %>% mutate_if(is.factor, as.character) -> Genre_np2
+names(Genre_np2)[1] = 'genre'
+
+Genre_np3 <- Genre_np2 %>%  unnest_tokens(word, genre)
+
+Genre_np3$word = ifelse(Genre_np3$word == 'sci', 'sci-fi', Genre_np3$word)
+
+Genre_np3 = subset(Genre_np3, Genre_np3$word != 'fi')
+
+look_Genre_np3 = Genre_np3 %>% count(word,sort = T) 
+
+Genre_np3 %>% count(word,sort = T) %>%
+#plot
+ggplot(aes(x = reorder(word, 
+    n, function(n) -n), y = n)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 60, 
+    hjust = 1)) + xlab("") + labs(y = "Genres of movies NOT picked by NYT")
+
+```
+
+<br>
+Of the 99 NYT critics pick movies, the most top 3 genres are drama, documentory and comedy. Their counts respectively are 57, 22 and 20 over a total of 202. On the other hand, the counts for those 3 genres from the not picked movies are 219, 92 and 105 over a total of 954. Three separate t-tests are used to test if there is a difference between genres proportions. Null hypothesis of the test assumes there is no diference between the two proportions.
+<br>
+
+
+```{r}
+ #the 2nd analysis - T test
+test1 = prop.test(c(57, 219),n = c(202,954), correct=FALSE) 
+test2 = prop.test(c(22, 92),n = c(202,954), correct=FALSE) 
+test3 = prop.test(c(20, 105),n = c(202,954), correct=FALSE) 
+
+cat("P-value for Genre drama: ", test1$p.value,"\n")
+cat("P-value for Genre documentory: ", test2$p.value,"\n")
+cat("P-value for Genre comedy.: ", test3$p.value,"\n")
+
+```
+
+<br>
+We could see none of these tests reject the null hypothesis, so we could conclude that there is not enough evidence to suggest the NYT critics pick has bias on specific genres of movies. One interesting fact that could be noticed from the bar charts is that Thriller seems to be unfavorable to NYT critics pick. An extra t-test is carried out and shown below. With a p-value of 0.056, it suggests there is still no bias on thriller movie. However 0.056 is very close the threshold alpha 5%, which could then suggest the other way.
+
+<br>
+```{r}
+test4 = prop.test(c(8, 74),n = c(202,954), correct=FALSE) 
+cat("P-value for Genre thriller: ", test4$p.value,"\n")
+
+```
+
+<br>
+Similar testing is used to analyze whether there is a relationship between NYT movie review sentiment and crtics picks. The summaries of picked and not picked movie review from the NYT are tokenized and sentiment of each "meaningful" word is imputed. 
+
+
+```{r}
+
+#tokenize the review
+#picked 
+review_p = nyt_picked
+
+review_p2 = as.data.frame(review_p[,3])
+
+
+review_p3 <- review_p2 %>%  unnest_tokens(word, review)
+
+no_mean_word <- stop_words %>% select(-lexicon) 
+
+review_p3_mean <- review_p3 %>% anti_join(no_mean_word, by='word')
+
+#get sentiments and merge
+nrc_lex <- get_sentiments("nrc")
+
+review_sentiment <- review_p3_mean %>% left_join(nrc_lex, by='word')
+
+review_sentiment2 <- review_sentiment %>% filter(!is.na(sentiment)) %>% group_by(sentiment) %>% summarise(n=n())
+
+look_review_sentiment2 = review_sentiment2
+
+review_sentiment2 %>% 
+#plot
+ggplot(aes(x = reorder(sentiment, 
+    n, function(n) -n), y = n)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 60, 
+    hjust = 1)) + xlab("") + labs(y = "Sentiment of movie reviews of NYT critic pick")
+```
+```{r}
+
+#tokenize the review
+#not picked 
+review_np = nyt_not_picked
+
+review_np2 = as.data.frame(review_np[,3])
+
+
+review_np3 <- review_np2 %>%  unnest_tokens(word, review)
+
+no_mean_word <- stop_words %>% select(-lexicon) 
+
+review_np3_mean <- review_np3 %>% anti_join(no_mean_word, by='word')
+
+#get sentiments and merge
+nrc_lex <- get_sentiments("nrc")
+
+review_sentiment_np <- review_np3_mean %>% left_join(nrc_lex, by='word')
+
+review_sentiment_np2 <- review_sentiment_np %>% filter(!is.na(sentiment)) %>% group_by(sentiment) %>% summarise(n=n())
+
+look_review_sentiment_np2 = review_sentiment_np2
+
+review_sentiment_np2 %>% 
+#plot
+ggplot(aes(x = reorder(sentiment, 
+    n, function(n) -n), y = n)) + geom_bar(stat = "identity") + theme(axis.text.x = element_text(angle = 60, 
+    hjust = 1)) + xlab("") + labs(y = "Sentiment of movie reviews of NYT critic pick")
+```
+<br>
+Of the 535 NYT critics pick movies, interestingly the most top 3 sentiments from picked and not picked movies reviews both are positive, trust and negative. Their counts respectively are 185, 83 and 66 over a total of 600 for picked. And the counts for those 3 sentiments from the not picked are 520, 384 and 318 over a total of 2491. Three separate t-tests are used to test if there is a difference between sentiment proportions. Null hypothesis of the test assumes there is no diference between the two proportions.
+
+```{r}
+testr1 = prop.test(c(183, 520),n = c(600,2491), correct=FALSE) 
+testr2 = prop.test(c(83, 384),n = c(600,2491), correct=FALSE) 
+testr3 = prop.test(c(66, 318),n = c(600,2491), correct=FALSE) 
+
+cat("P-value for sentiment positive: ", testr1$p.value,"\n")
+cat("P-value for sentiment trust: ", testr2$p.value,"\n")
+cat("P-value for sentiment negative.: ", testr3$p.value,"\n")
+```
+<br>
+We could see the P-value for sentiment positive suggests that there is a difference between proportion of postive sentiments appeared in picked and not picked movie reviews. In fact it makes logical sense that sentiment positive appears more in the picked movies. And the other two tests suggest no diference.
+
+<br>
+
+The last part of this report is dedicated to discover what are the main factors that drive the revenue of the movies. The main data source is based on The Numbers. A multiple linear regression model with revenue as dependent variable is modelled with a list of explanatory variables explained below:
+<br>
+
+
+```{r}
+#the 3rd analysis - LM
+#get the complet OMBd
+# list_all = mojo_rev
+# 
+# 
+# 
+# #OMDb data
+# apikey_omdb ="59a6f6c5"
+# 
+# omdb_q <- GET("http://www.omdbapi.com/", 
+#           query = list(t = list_all$movie[1], apikey = apikey_omdb))
+#           
+# temp <- as.data.frame(content(omdb_q))
+# 
+# omdb_dat_all = temp %>%
+#   select(Title, Genre, Awards, Ratings.Source, Ratings.Value, Ratings.Source.1, Ratings.Value.1, Ratings.Source.2, Ratings.Value.2)
+# 
+# 
+# for (i in 2:nrow(list_all)) {
+# #since there are some data error, movie Mayweather vs. McGregor, Raees, Spices of Liberty, The B-Side, The Helsings, The Queen of Katwe,Three Generations, Thrill Ride are removed
+# if(!(list_all$movie[i] %in% c('Mayweather vs. McGregor', 'Raees', 'Spices of Liberty', 'The B-Side', 'The Helsings', 'The Queen of Katwe','Three Generations', 'Thrill Ride'))){
+#   
+#  
+# 
+# omdb_q <- GET("http://www.omdbapi.com/", 
+#           query = list(t = list_all$movie[i], apikey = apikey_omdb))
+#           
+# temp <- as.data.frame(content(omdb_q))
+# 
+# 
+#       fncols <- function(data, cname) {
+#         add <-cname[!cname%in%names(data)]
+#       
+#         if(length(add)!=0) data[add] <- NA
+#         data
+#       }
+# 
+# temp3 = fncols(temp, c('Title', 'Genre', 'Awards', 'Ratings.Source', 'Ratings.Value', 'Ratings.Source.1', 'Ratings.Value.1', 'Ratings.Source.2', 'Ratings.Value.2'))
+# 
+# if (temp$Response == 'True'){temp2 = temp3 %>%
+#     select(Title, Genre, Awards, Ratings.Source, Ratings.Value, Ratings.Source.1, Ratings.Value.1, Ratings.Source.2, Ratings.Value.2)
+#     omdb_dat_all = rbind(omdb_dat_all,temp2)}
+# 
+# }
+# }
+###########################################
+
+omdb_dat_all <- read_csv(file = "https://raw.githubusercontent.com/eddyeddyeddy/sta2453proj1/master/omdb_dat_all.csv")
+
+#convert review scores
+omdb_dat_all['imbd'] = NA
+omdb_dat_all['tomato'] = NA
+omdb_dat_all['meta'] = NA
+
+omdb_dat_all$imbd <- suppressWarnings( ifelse(omdb_dat_all$Ratings.Source  == 'Internet Movie Database', as.numeric(substr(omdb_dat_all$Ratings.Value,1,3))*10, NA) )
+
+omdb_dat_all$tomato <- suppressWarnings( ifelse(omdb_dat_all$Ratings.Source.1  == 'Rotten Tomatoes', as.numeric(substr(omdb_dat_all$Ratings.Value.1, 1,2)), 
+                        ifelse(omdb_dat_all$Ratings.Source.2  == 'Rotten Tomatoes', as.numeric(substr(omdb_dat_all$Ratings.Value.2, 1,2)), NA)) )  
+   
+omdb_dat_all$meta <- suppressWarnings( ifelse(omdb_dat_all$Ratings.Source.1  == 'Metacritic', as.numeric(substr(omdb_dat_all$Ratings.Value.1, 1,2)), 
+                        ifelse(omdb_dat_all$Ratings.Source.2  == 'Metacritic', as.numeric(substr(omdb_dat_all$Ratings.Value.2, 1,2)), NA)) ) 
+  
+
+
+################################################
+#merging data with revenue from Number
+number_rev = mojo_rev
+nyt_picked_m = nyt_picked
+
+number_rev$movie_m = toupper(number_rev$movie)
+nyt_picked_m$movie_m = toupper(nyt_picked$movie)
+omdb_dat_all$movie_m = toupper(omdb_dat_all$Title)
+
+main1 = merge(number_rev, nyt_picked_m, by="movie_m", all.x=TRUE)
+main2 = merge(main1, omdb_dat_all, by="movie_m", all.x=TRUE)
+
+#deduplicate
+temp = main2
+
+  main3 = temp %>% 
+    select(movie_m, movie.x, distributor, total_gross, date, pick, Genre, Awards, imbd, tomato, meta) %>% 
+    group_by(movie.x, distributor) %>% 
+    arrange(total_gross) %>% 
+    slice(n())
+  
+main4 <- main3 %>% mutate_if(is.factor, as.character)
+
+#get genre
+list_genre = main4
+
+list_genre2 <- list_genre %>%  unnest_tokens(word, Genre)
+
+list_genre2$word = ifelse(list_genre2$word == 'sci', 'sci-fi', list_genre2$word)
+list_genre2 = subset(list_genre2, list_genre2$word != 'fi')
+
+list_genre3 = list_genre2[, c(1,3,11)]
+
+list_genre3$value = 1
+
+list_genre4 = cast(list_genre3, movie_m+distributor ~ word)
+
+list_genre4[,3:24][is.na(list_genre4[,3:24])] = 0
+
+
+
+main5 = merge(main4, list_genre4, by=c("movie_m", "distributor"), all.x=TRUE)
+
+main5['award_n'] = NA
+main5$award_n = ifelse( !(is.na(main5$Awards) | main5$Awards == 'N/A'), 1, 0)
+
+main6 = subset(main5, select = -c(Genre, Awards))
+
+main6[,c(6,10:32)][is.na(main6[,c(6,10:32)])] = 0
+
+main6['avg_rev'] = NA
+main6$avg_rev = rowMeans(main6[,7:9], na.rm=TRUE)
+
+#categorize distributor
+main6['cat_dist'] = NA
+list_big_dist = c('20th Century Fox', 'Lionsgate', 'Paramount Pictures', 'Sony Pictures', 'Universal', 'Walt Disney', 'Warner Bros.' )
+main6$cat_dist = suppressWarnings( ifelse(main6$distributor %in% list_big_dist, 1, 0) )
+
+main6['cat_gen'] = NA
+main6$cat_gen = suppressWarnings( ifelse(main6$drama == 1 | main6$action == 1 | main6$comedy == 1 | main6$adventure == 1, 1, 0) )
+
+```
+
+
+<br>
+
+Production companies - companies are categorized into 1 if they are the top 7 companies (20th Century Fox, Lionsgate, Paramount Pictures, Sony Pictures, Universal, Walt Disney, Warner Bros.) and 0 if not. These 7 companies are named 'top' since each of them has a share of at least 10% of the movie market according to The Numbers.
+<br>
+
+NYT critics pick - 1 as Yes and 0 as No
+
+Nominations/wins - 1 as movie was nominated or won any awards and 0 otherwise
+
+Genres - since drama, comedy, action and adventure have added up to overall 50% of all movie genres, these 4 will be defined as popular genres from movie producers' perspective and they have a value of 1.
+
+
+```{r}
+show_genre_per = fre(list_genre3$word)
+show_genre_per2 = show_genre_per[1:(nrow(show_genre_per)-2), 1:3]
+show_genre_per2[order(-show_genre_per2$Count),]
+```
+
+<br>
+
+Review scores - the average of review scores from IMDb, Rotten Tomatoes and Metacritic.
+
+
+<br>
+There are some adjustments needed for the dataset and the regression model. A natural log to the response variable revenue is applied in order to deal with the skewness. Also a cut off of 4/sample size (4/294) for cook's distance is used to remove the outliers.
+
+<br>
+After the adjustments to the model and the dataset, the Residuals vs Fitted plot shows a constant variability. Therefore the linear model should be appropriate for the prediction. Below are summary and plots for the linear regression modelled as log(Total gross) = NYT pick (pick) + average review scores (avg_rev) + big producer (cat_dist) + popular genres (cat_gen) + award won/nominated (award_n).
+
+```{r}
+#remove all rows that have at least 1 col of missing and reassign back the row number
+main7 = subset(main6,  !(is.na(pick) | is.na(avg_rev) | is.na(cat_dist) | is.na(cat_gen) |is.na(award_n)))
+rownames(main7) <- 1:nrow(main7)
+
+#LM
+linearMod <- lm(total_gross ~ pick + avg_rev + cat_dist + cat_gen + award_n , data=main7)
+# summary(linearMod)
+
+```
+
+```{r}
+#LM
+# layout(matrix(c(1,2,3,4),2,2)) # optional 4 graphs/page 
+# plot(linearMod)
+```
+
+<br>
+```{r}
+cooksd = cooks.distance(linearMod)
+sample_size <- nrow(main7)
+
+influential <- as.numeric(names(cooksd)[(cooksd > (4/sample_size))])
+
+
+main8 <- main7[-influential, ]
+
+outliers_movies <- main7[influential, ] 
+        
+```
+
+
+```{r}
+#LM2
+linearMod2 <- lm( log(total_gross) ~ pick + avg_rev + cat_dist + cat_gen + award_n , data=main8)
+summary(linearMod2)
+
+```
+
+
+```{r}
+#LM2
+layout(matrix(c(1,2,3,4),2,2)) # optional 4 graphs/page 
+plot(linearMod2)
+```
+
+
+<br>
+
+##Conclusion
+
+In conclusion, it is unfortunate that R-squared only has a value of 40%, meaning the model can only explain 40% of the variability in the movie revenues. However, there are still some interesting factors we could notice from above result. First we may notice that the reviews from either NYT or audiances may not be as important as whether the movies are from big production companies and whether the genres of the movies are popular. In other words, movies from big production companies or movies from popular genres are making more money in general. Moverover, the critics reviews and even the general reviews seemingly do not have strong influence to most of the movie-goers. In fact, amount 126 movies that have achieved more than 15 million dollars in revenue in 2017, 46 movies of them are not from NYT critics pick and received below 50% average reviews score.  
+
+<br>
+There are some limitations in this study and further research may be required. I believe that movie budget, famous actors and movie directors all are meaningful covariates and should be added to the multiple linear regression model. And adding those covariates will definitely help explain a larger percentage of variability in movie revenues. However those infomations are either hard to collect or categorize. A larger sample size of movies may also be needed in order to reduce the effect of removal due to missingness. 
+
+
+
+```{r}
+over15M_low_review = subset(main8,avg_rev<50 &  total_gross >15000000  & pick==0)
+over15M_low_review2 = subset(main8,  total_gross >15000000  )
+
+#test 
+#linearMod3 <- lm( total_gross ~ pick + avg_rev + cat_dist + cat_gen + award_n , data=main8)
+#summary(linearMod3)
+#layout(matrix(c(1,2,3,4),2,2)) # optional 4 graphs/page 
+#plot(linearMod3)
+
+#a = subset(main8,avg_rev<50 &  total_gross >15000000  & pick==0)
+
+#outliers_movies2 = outliers_movies[, c(1,2)]
+
+#names(outliers_movies2)[1] = 'Movie'
+#outliers_movies2
+```
+
+```{r}
+# linearMod2 <- lm( log(total_gross) ~ pick + avg_rev + cat_dist + cat_gen + award_n , data=main8)
+# linearMod3 <- lm( log(total_gross) ~ pick +  cat_dist + cat_gen + award_n , data=main8)
+# linearMod4 <- lm( log(total_gross) ~ cat_dist + cat_gen + award_n , data=main8)
+# linearMod5 <- lm( log(total_gross) ~ cat_dist + cat_gen + award_n , data=main8)
+# summary(linearMod5)
+# anova(linearMod3,linearMod4)
+```
